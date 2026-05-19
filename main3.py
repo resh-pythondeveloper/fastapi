@@ -1,0 +1,39 @@
+from sqlmodel import SQLModel,Field,select
+from typing import Optional
+from contextlib import asynccontextmanager
+from sqlmodel import create_engine,Session
+from fastapi import FastAPI,Depends
+from typing import List
+
+class Item(SQLModel,table=True):
+    id:Optional[int]=Field(default=None,primary_key=True)
+    name:str
+    price:float
+
+sqlite_file_name="database.db"
+sqlite_url=f"sqlite:///{sqlite_file_name}"
+engine=create_engine(sqlite_url,echo=True)
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+    create_db_and_tables()
+    yield
+
+app=FastAPI(lifespan=lifespan)
+
+@app.post("/items/")
+def create_item(item:Item):
+    with Session(engine) as session:
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return item
+    
+@app.get("/items/",response_model=List[Item])
+def read_items():
+    with Session(engine) as session:
+        items=session.exec(select(Item)).all()
+        return items
